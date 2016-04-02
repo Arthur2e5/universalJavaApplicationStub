@@ -87,7 +87,7 @@ CFBundleIconFile=$(plist_get CFBundleIconFile)
 InfoStyle=oracle
 for JavaKey in Java JavaX; do
 	# JavaX is for universalJavaApplication style.
-	if plist_get "$AppleStyleJavaKey" &>/dev/null; then
+	if plist_get "$JavaKey" &>/dev/null; then
 		InfoStyle=apple
 		break
 	fi
@@ -95,7 +95,8 @@ done
 
 
 case $InfoStyle in
-	apple)
+
+apple)
 	# set Java and Resources folder
 	JavaFolder="${AppleJavaFolder}"
 	ResourcesFolder="${AppleResourcesFolder}"
@@ -162,9 +163,9 @@ case $InfoStyle in
 
 	# read the Java version we want to find
 	JVMVersion=`/usr/libexec/PlistBuddy -c "print ${JavaKey}:JVMVersion" "${InfoPlistFile}" 2> /dev/null | xargs`
-
+	;;
 # read Info.plist in Oracle style
-else
+oracle)
 
 	# set Working Directory and Java and Resources folder
 	JavaFolder="${OracleJavaFolder}"
@@ -257,7 +258,7 @@ JavaVersionSatisfiesRequirement() {
 #           from java -version command
 ############################################
 
-function extractJavaMajorVersion() {
+extractJavaMajorVersion() {
   echo `"$1" -version 2>&1 | awk '/version/{print $NF}' | sed -E 's/"([0-9.]{3})[0-9_.]{5}"/\1/g'`
 }
 
