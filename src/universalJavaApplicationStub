@@ -115,6 +115,7 @@ case $InfoStyle in
 
 	# expand variables $APP_PACKAGE, $JAVAROOT, $USER_HOME, assuming no harm..
 	# replace all '"' with '\"' beforehand to avoid quote clashes, just in case.
+	# warning: The double quotes may end up causing problems, same for JVMOptions.
 	eval "WorkingDirectory=\"${WorkingDirectory//\"/\\\"}\""
 
 	# read the MainClass name
@@ -123,21 +124,22 @@ case $InfoStyle in
 	# read the SplashFile name
 	JVMSplashFile=$(plist_get "${JavaKey}:SplashFile")
 
+	JVMOptions=()
 	# read the JVM Options and parse the dict.. not fun
+	# based on http://www.real-world-systems.com/docs/PlistBuddy.1.html output.. OS X not available for now (sigh)
 	while IFS='' read line; do
-		if [[ $line != *=* ]]; then
-			continue	# doesn't have '=', not interesting
+		if [[ $line != *' = '* ]]; then
+			continue			# doesn't have '=', not interesting
 		fi
-		
+		line=${line#'    '}			# kill the indents, four spaces.
+		line=${line/' = '/=}			# subst the first occurance of ' = ' w/ '='
+		eval "line=\"${line//\"/\\\"}\""	# double quotes again, expands $APP_ROOT
+		JVMOptions+=("$line")
 	done <<< "$(plist_get "${JavaKey}:Properties")"
-	`/usr/libexec/PlistBuddy -c "print ${JavaKey}:Properties" "${InfoPlistFile}" 2> /dev/null | grep " =" | sed 's/^ */-D/g' | tr '\n' ' ' | sed 's/  */ /g' | sed 's/ = /=/g' | xargs`
-	# replace occurences of $APP_ROOT with its content
-	JVMOptions=`eval "echo ${JVMOptions}"`
 
-	# read StartOnMainThread
-	JVMStartOnMainThread=`/usr/libexec/PlistBuddy -c "print ${JavaKey}:StartOnMainThread" "${InfoPlistFile}" 2> /dev/null`
-	if [ "${JVMStartOnMainThread}" == "true" ]; then
-		JVMOptions+=" -XstartOnFirstThread"
+	# StartOnMainThread
+	if [ "$(plist_get "${JavaKey}:StartOnMainThread")" == "true" ]; then
+		JVMOptions+=("-XstartOnFirstThread")
 	fi
 
 	# read the ClassPath in either Array or String style
@@ -211,7 +213,7 @@ fi
 # function: Java version tester
 ############################################
 
-function JavaVersionSatisfiesRequirement() {
+JavaVersionSatisfiesRequirement() {
   java_ver=$1
   java_req=$2
   
