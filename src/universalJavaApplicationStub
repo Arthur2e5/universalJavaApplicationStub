@@ -205,7 +205,7 @@ oracle)
 	JVMArguments=`/usr/libexec/PlistBuddy -c "print :JVMArguments" "${InfoPlistFile}" 2> /dev/null | tr -d '\n' | sed -E 's/Array \{ *(.*) *\}/\1/g' | sed 's/  */ /g' | xargs`
 	# replace occurences of $APP_ROOT with its content
 	JVMArguments=`eval "echo ${JVMArguments}"`
-fi
+esac
 
 
 
