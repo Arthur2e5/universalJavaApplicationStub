@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 ##################################################################################
 #                                                                                #
 # universalJavaApplicationStub                                                   #
@@ -14,7 +14,7 @@
 # @author    Tobias Fischer                                                      #
 # @url       https://github.com/tofi86/universalJavaApplicationStub              #
 # @date      2015-11-02                                                          #
-# @version   1.0.1                                                               #
+# @version   2.0.0                                                               #
 #                                                                                #
 #                                                                                #
 ##################################################################################
@@ -23,6 +23,7 @@
 # The MIT License (MIT)                                                          #
 #                                                                                #
 # Copyright (c) 2015 Tobias Fischer                                              #
+# Copyright (c) 2016 Mingye Wang                                                 #
 #                                                                                #
 # Permission is hereby granted, free of charge, to any person obtaining a copy   #
 # of this software and associated documentation files (the "Software"), to deal  #
@@ -52,77 +53,49 @@
 ############################################
 # http://stackoverflow.com/a/25880707/3770260
 readlink_f() {
-    perl -MCwd=abs_path -le 'print abs_path readlink(shift);' "$1"
+	perl -MCwd=abs_path -le 'print abs_path readlink(shift);' "$1"
 }
 
-PRG=`readlink_f "$0"`
-
-# set the directory abspath of the current shell script
-PROGDIR=`dirname "$PRG"`
-
-
-
+PRG=$(readlink_f "$0")		# abspath of the script
+PROGDIR=$(dirname "$PRG")	# dir abspath of the script
 
 #
-# set files and folders
+# set some paths
 ############################################
 
-# the absolute path of the app package
-cd "$PROGDIR"/../../
-AppPackageFolder=`pwd`
-
-# the base path of the app package
-cd ..
-AppPackageRoot=`pwd`
-
-# set Apple's Java folder
-AppleJavaFolder="${AppPackageFolder}"/Contents/Resources/Java
-
-# set Apple's Resources folder
-AppleResourcesFolder="${AppPackageFolder}"/Contents/Resources
-
-# set Oracle's Java folder
-OracleJavaFolder="${AppPackageFolder}"/Contents/Java
-
-# set Oracle's Resources folder
-OracleResourcesFolder="${AppPackageFolder}"/Contents/Resources
-
-# set path to Info.plist in bundle
-InfoPlistFile="${AppPackageFolder}"/Contents/Info.plist
-
-# set the default JVM Version to a null string
+AppPackageFolder=$(readlink_f "$PROGDIR"/../..)			# abspath of the app package
+AppPackageRoot=$(readlink_f "$PROGDIR"/../../..)		# basepath of the app package
+AppleJavaFolder="${AppPackageFolder}"/Contents/Resources/Java	# Apple's Java folder
+AppleResourcesFolder="${AppPackageFolder}"/Contents/Resources	# Apple's Resources folder
+OracleJavaFolder="${AppPackageFolder}"/Contents/Java		# Oracle's Java folder
+OracleResourcesFolder="${AppPackageFolder}"/Contents/Resources	# Oracle's Resources folder
+InfoPlistFile="${AppPackageFolder}"/Contents/Info.plist		# path to Info.plist in bundle
 JVMVersion=""
-
-
-
 
 #
 # read Info.plist and extract JVM options
 ############################################
+# pointless helper function to make things look (temporarily) better
+plist_get(){
+	/usr/libexec/PlistBuddy -c "print :$1" "${InfoPlistFile}"
+}
 
-# read the program name from CFBundleName
-CFBundleName=`/usr/libexec/PlistBuddy -c "print :CFBundleName" "${InfoPlistFile}"`
+# read the program name and icon file name
+CFBundleName=$(plist_get CFBundleName)
+CFBundleIconFile=$(plist_get CFBundleIconFile)
 
-# read the icon file name
-CFBundleIconFile=`/usr/libexec/PlistBuddy -c "print :CFBundleIconFile" "${InfoPlistFile}"`
-
-
-# check Info.plist for Apple style Java keys -> if key :Java is present, parse in apple mode
-/usr/libexec/PlistBuddy -c "print :Java" "${InfoPlistFile}" > /dev/null 2>&1
-exitcode=$?
-JavaKey=":Java"
-
-# if no :Java key is present, check Info.plist for universalJavaApplication style JavaX keys -> if key :JavaX is present, parse in apple mode
-if [ $exitcode -ne 0 ]; then
-	/usr/libexec/PlistBuddy -c "print :JavaX" "${InfoPlistFile}" > /dev/null 2>&1
-	exitcode=$?
-	JavaKey=":JavaX"
-fi
+InfoStyle=oracle
+for JavaKey in Java JavaX; do
+	# JavaX is for universalJavaApplication style.
+	if plist_get "$AppleStyleJavaKey" &>/dev/null; then
+		InfoStyle=apple
+		break
+	fi
+done
 
 
-# read Info.plist in Apple style if exit code returns 0 (true, :Java key is present)
-if [ $exitcode -eq 0 ]; then
-
+case $InfoStyle in
+	apple)
 	# set Java and Resources folder
 	JavaFolder="${AppleJavaFolder}"
 	ResourcesFolder="${AppleResourcesFolder}"
@@ -131,30 +104,33 @@ if [ $exitcode -eq 0 ]; then
 	JAVAROOT="${AppleJavaFolder}"
 	USER_HOME="$HOME"
 
-
 	# read the Java WorkingDirectory
-	JVMWorkDir=`/usr/libexec/PlistBuddy -c "print ${JavaKey}:WorkingDirectory" "${InfoPlistFile}" 2> /dev/null | xargs`
+	JVMWorkDir=$(plist_get "${JavaKey}:WorkingDirectory")
 	
-	# set Working Directory based upon Plist info
-	if [[ ! -z ${JVMWorkDir} ]]; then
-		WorkingDirectory="${JVMWorkDir}"
-	else
+	# If working directory is not in the plist...
+	if [[ ${JVMWorkDir} == '' ]]; then
 		# AppPackageRoot is the standard WorkingDirectory when the script is started
 		WorkingDirectory="${AppPackageRoot}"
 	fi
 
-	# expand variables $APP_PACKAGE, $JAVAROOT, $USER_HOME
-	WorkingDirectory=`eval "echo ${WorkingDirectory}"`
-
+	# expand variables $APP_PACKAGE, $JAVAROOT, $USER_HOME, assuming no harm..
+	# replace all '"' with '\"' beforehand to avoid quote clashes, just in case.
+	eval "WorkingDirectory=\"${WorkingDirectory//\"/\\\"}\""
 
 	# read the MainClass name
-	JVMMainClass=`/usr/libexec/PlistBuddy -c "print ${JavaKey}:MainClass" "${InfoPlistFile}" 2> /dev/null`
+	JVMMainClass=$(plist_get "${JavaKey}:MainClass")
 
 	# read the SplashFile name
-	JVMSplashFile=`/usr/libexec/PlistBuddy -c "print ${JavaKey}:SplashFile" "${InfoPlistFile}" 2> /dev/null`
+	JVMSplashFile=$(plist_get "${JavaKey}:SplashFile")
 
-	# read the JVM Options
-	JVMOptions=`/usr/libexec/PlistBuddy -c "print ${JavaKey}:Properties" "${InfoPlistFile}" 2> /dev/null | grep " =" | sed 's/^ */-D/g' | tr '\n' ' ' | sed 's/  */ /g' | sed 's/ = /=/g' | xargs`
+	# read the JVM Options and parse the dict.. not fun
+	while IFS='' read line; do
+		if [[ $line != *=* ]]; then
+			continue	# doesn't have '=', not interesting
+		fi
+		
+	done <<< "$(plist_get "${JavaKey}:Properties")"
+	`/usr/libexec/PlistBuddy -c "print ${JavaKey}:Properties" "${InfoPlistFile}" 2> /dev/null | grep " =" | sed 's/^ */-D/g' | tr '\n' ' ' | sed 's/  */ /g' | sed 's/ = /=/g' | xargs`
 	# replace occurences of $APP_ROOT with its content
 	JVMOptions=`eval "echo ${JVMOptions}"`
 
